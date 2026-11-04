@@ -4,7 +4,7 @@ import { computeLayout } from '../engine/layoutTree'
 import { TEMPLATES } from '../engine/templates'
 import { A4_WIDTH_MM, A4_HEIGHT_MM } from '../engine/units'
 import { Cell } from './Cell'
-import { DividerHandle } from './DividerHandle'
+import { DividerHandle, SplitRatioUpdate } from './DividerHandle'
 import { Guides } from './Guides'
 import { useProject } from '../store/useProject'
 import { useUi } from '../store/useUi'
@@ -32,6 +32,7 @@ export const PageView: React.FC<PageViewProps> = ({
 
   const setPageTemplate = useProject((state) => state.setPageTemplate)
   const updateSplitRatio = useProject((state) => state.updateSplitRatio)
+  const updateSplitRatios = useProject((state) => state.updateSplitRatios)
   const smartPackCurrentPage = useProject((state) => state.smartPackCurrentPage)
 
   const selectedCellId = useUi((state) => state.selectedCellId)
@@ -49,25 +50,31 @@ export const PageView: React.FC<PageViewProps> = ({
   const activeTree = liveTree || page.tree
   const layout = computeLayout(activeTree, contentRect, settings.gutterMm)
 
-  const otherDividerCoords = layout.dividers.map((d) => d.coord)
-
-  const handleLiveRatioChange = (splitId: string, ratio: number) => {
-    // Fast local mutation for 60fps drag
-    const updateLocalTree = (node: any): any => {
+  const handleLiveRatiosChange = (updates: SplitRatioUpdate[]) => {
+    let current = page.tree
+    const updateLocalTree = (node: any, splitId: string, ratio: number): any => {
       if (node.type === 'leaf') return node
       if (node.id === splitId) return { ...node, ratio }
       return {
         ...node,
-        a: updateLocalTree(node.a),
-        b: updateLocalTree(node.b)
+        a: updateLocalTree(node.a, splitId, ratio),
+        b: updateLocalTree(node.b, splitId, ratio)
       }
     }
-    setLiveTree(updateLocalTree(page.tree))
+
+    for (const u of updates) {
+      current = updateLocalTree(current, u.splitId, u.ratio)
+    }
+    setLiveTree(current)
   }
 
-  const handleCommitRatioChange = (splitId: string, ratio: number) => {
+  const handleCommitRatiosChange = (updates: SplitRatioUpdate[]) => {
     setLiveTree(null)
-    updateSplitRatio(page.id, splitId, ratio)
+    if (updates.length === 1) {
+      updateSplitRatio(page.id, updates[0].splitId, updates[0].ratio)
+    } else if (updates.length > 1) {
+      updateSplitRatios(page.id, updates)
+    }
   }
 
   const handleResetSplit = (splitId: string) => {
@@ -164,10 +171,10 @@ export const PageView: React.FC<PageViewProps> = ({
             key={divider.id}
             divider={divider}
             scale={scale}
-            otherDividerCoords={otherDividerCoords}
+            allDividers={layout.dividers}
             onGuideChange={(coord, dir) => setGuideState({ coord, dir })}
-            onLiveRatioChange={handleLiveRatioChange}
-            onCommitRatioChange={handleCommitRatioChange}
+            onLiveRatiosChange={handleLiveRatiosChange}
+            onCommitRatiosChange={handleCommitRatiosChange}
             onResetSplit={handleResetSplit}
           />
         ))}

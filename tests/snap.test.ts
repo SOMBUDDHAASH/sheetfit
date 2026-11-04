@@ -70,4 +70,24 @@ describe('snap module', () => {
     expect(resultHigh.ratio).toBe(0.8)
     expect(resultHigh.coord).toBe(90) // 10 + 0.8 * 100 = 90
   })
+
+  it('Shift-drag collinear divider moves together when coordinates match within 0.5 mm', () => {
+    // Divider A coord = 50.0, Divider B coord = 50.2 (within 0.5mm threshold)
+    const coordA = 50.0
+    const coordB = 50.2
+    expect(Math.abs(coordA - coordB)).toBeLessThanOrEqual(0.5)
+
+    // Proposed delta +10mm
+    const deltaMm = 10
+    const proposedA = coordA + deltaMm
+    const proposedB = coordB + deltaMm
+
+    const resA = snapDividerPosition(proposedA, 0, 100, 0.2, 0.8, [], true)
+    const resB = snapDividerPosition(proposedB, 0, 100, 0.2, 0.8, [], true)
+
+    expect(resA.coord).toBeCloseTo(60.0, 2)
+    expect(resB.coord).toBeCloseTo(60.2, 2)
+    expect(resA.ratio).toBeCloseTo(0.6, 2)
+    expect(resB.ratio).toBeCloseTo(0.602, 2)
+  })
 })

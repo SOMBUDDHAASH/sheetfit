@@ -18,6 +18,7 @@ export interface ProjectState {
   setPageTemplate: (pageId: string, templateId: string) => void
   setPageTree: (pageId: string, tree: LayoutNode) => void
   updateSplitRatio: (pageId: string, splitId: string, ratio: number) => void
+  updateSplitRatios: (pageId: string, updates: { splitId: string; ratio: number }[]) => void
   splitCell: (pageId: string, leafId: string, dir: 'cols' | 'rows') => void
   mergeCell: (pageId: string, leafId: string) => void
   insertBlankCell: (afterId?: string) => void
@@ -121,6 +122,20 @@ export const useProject = create<ProjectState>()(
           const page = state.doc.pages.find((p) => p.id === pageId)
           if (page) {
             page.tree = updateSplitRatioInTree(page.tree, splitId, ratio)
+            page.customized = true
+          }
+        })
+      },
+
+      updateSplitRatios: (pageId, updates) => {
+        set((state) => {
+          const page = state.doc.pages.find((p) => p.id === pageId)
+          if (page) {
+            let tree = page.tree
+            for (const u of updates) {
+              tree = updateSplitRatioInTree(tree, u.splitId, u.ratio)
+            }
+            page.tree = tree
             page.customized = true
           }
         })

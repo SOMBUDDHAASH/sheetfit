@@ -55,7 +55,41 @@ export const App: React.FC = () => {
       }
     })
 
-    return () => stopAutosave()
+    // Handle global clipboard paste (Ctrl+V)
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      const files: File[] = []
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile()
+          if (file) files.push(file)
+        }
+      }
+      if (files.length > 0) {
+        e.preventDefault()
+        try {
+          const imported = await importFromFiles(files, {
+            onError: (name, err) => {
+              addToast({ title: `Failed to paste ${name}`, description: err.message, type: 'error' })
+            }
+          })
+          if (imported.length > 0) {
+            addImages(imported)
+            addToast({ title: `Pasted ${imported.length} image(s)`, type: 'success' })
+          }
+        } catch (err: any) {
+          addToast({ title: 'Paste failed', description: err.message, type: 'error' })
+        }
+      }
+    }
+
+    window.addEventListener('paste', handlePaste)
+
+    return () => {
+      stopAutosave()
+      window.removeEventListener('paste', handlePaste)
+    }
   }, [])
 
   // 2. Global Keyboard Shortcuts

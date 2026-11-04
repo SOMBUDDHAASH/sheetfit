@@ -1,5 +1,5 @@
-import { LayoutNode, ImageItem, Rect } from '../types'
-import { isLeaf, isSplit, getValidRatioRange, computeLayout } from './layoutTree'
+import { LayoutNode, SplitNode, ImageItem, Rect } from '../types'
+import { isLeaf, isSplit, clampSplitRatio, getValidRatioRange, computeLayout } from './layoutTree'
 import { computeDraw } from './drawRect'
 import { TEMPLATES } from './templates'
 
@@ -48,9 +48,67 @@ export function computeUtilization(
   return totalImgArea / totalContentArea
 }
 
+interface SubtreeAspect {
+  aspect: number
+  node: LayoutNode
+}
+
 /**
- * Collects references to all split nodes in the tree
+ * Equalizes split ratios so adjacent images share equal height (cols) or equal width (rows) with zero relative letterboxing.
+ * "For two images side by side, the width ratio equals the aspect-ratio ratio so both have equal height and zero letterboxing."
  */
+export function equalizeSplitRatios(
+  root: LayoutNode,
+  images: (ImageItem | undefined)[],
+  contentRect: Rect
+): LayoutNode {
+  let imgIndex = 0
+
+  function computeSubtree(node: LayoutNode, extentW: number, extentH: number): SubtreeAspect {
+    if (isLeaf(node)) {
+      const img = images[imgIndex++]
+      const aspect = getImageEffectiveAspectRatio(img)
+      return { aspect, node: { ...node } }
+    }
+
+    if (isSplit(node)) {
+      const childA = computeSubtree(node.a, extentW, extentH)
+      const childB = computeSubtree(node.b, extentW, extentH)
+
+      let optimalRatio: number
+      let combinedAspect: number
+
+      if (node.dir === 'cols') {
+        optimalRatio = childA.aspect / (childA.aspect + childB.aspect)
+        combinedAspect = childA.aspect + childB.aspect
+      } else {
+        optimalRatio = childB.aspect / (childA.aspect + childB.aspect)
+        combinedAspect = 1 / (1 / childA.aspect + 1 / childB.aspect)
+      }
+
+      const parentExtent = node.dir === 'cols' ? extentW : extentH
+      const clampedRatio = clampSplitRatio(
+        { ...node, a: childA.node, b: childB.node },
+        parentExtent,
+        optimalRatio
+      )
+
+      const updatedSplit: SplitNode = {
+        ...node,
+        ratio: clampedRatio,
+        a: childA.node,
+        b: childB.node
+      }
+
+      return { aspect: combinedAspect, node: updatedSplit }
+    }
+
+    return { aspect: 1.0, node }
+  }
+
+  return computeSubtree(root, contentRect.w, contentRect.h).node
+}
+
 function collectSplitPaths(
   node: LayoutNode,
   currentPath: number[] = []
@@ -115,6 +173,7 @@ function getNodeAtPath(root: LayoutNode, path: number[]): LayoutNode | null {
 
 /**
  * Optimizes split ratios of a given layout tree using coordinate descent to maximize total visible image area.
+ * Guaranteed to produce utilization >= baseline tree.
  */
 export function optimizeTreeRatios(
   root: LayoutNode,
@@ -125,58 +184,40 @@ export function optimizeTreeRatios(
   let currentTree = root
   let bestScore = computeUtilization(currentTree, images, contentRect, gutterMm)
 
-  // Initial seed from aspect ratios if 2-leaf split
-  if (isSplit(currentTree) && isLeaf(currentTree.a) && isLeaf(currentTree.b)) {
-    const arA = getImageEffectiveAspectRatio(images[0])
-    const arB = getImageEffectiveAspectRatio(images[1])
-    let seedRatio: number
-    if (currentTree.dir === 'cols') {
-      seedRatio = arA / (arA + arB)
-    } else {
-      seedRatio = arB / (arA + arB)
-    }
-
-    const parentExt = currentTree.dir === 'cols' ? contentRect.w : contentRect.h
-    const [minR, maxR] = getValidRatioRange(currentTree, parentExt)
-    const clampedSeed = Math.max(minR, Math.min(maxR, seedRatio))
-    const candidateTree: LayoutNode = { ...currentTree, ratio: clampedSeed }
-    const candScore = computeUtilization(candidateTree, images, contentRect, gutterMm)
-    if (candScore > bestScore) {
-      bestScore = candScore
-      currentTree = candidateTree
-    }
+  // Test equalized aspect ratio candidate
+  const equalizedTree = equalizeSplitRatios(root, images, contentRect)
+  const equalizedScore = computeUtilization(equalizedTree, images, contentRect, gutterMm)
+  if (equalizedScore > bestScore) {
+    bestScore = equalizedScore
+    currentTree = equalizedTree
   }
 
   const splits = collectSplitPaths(currentTree)
   if (splits.length === 0) return currentTree
 
-  // Run 2 iterations of coordinate descent over all splits
-  const maxIterations = 2
-  const steps = 20
+  // Coordinate descent
+  const steps = 15
+  for (const { path } of splits) {
+    const node = getNodeAtPath(currentTree, path)
+    if (!node || !isSplit(node)) continue
 
-  for (let iter = 0; iter < maxIterations; iter++) {
-    for (const { path } of splits) {
-      const node = getNodeAtPath(currentTree, path)
-      if (!node || !isSplit(node)) continue
+    const parentExtent = getNodeParentExtent(currentTree, path, contentRect)
+    const [minR, maxR] = getValidRatioRange(node, parentExtent)
+    if (maxR <= minR) continue
 
-      const parentExtent = getNodeParentExtent(currentTree, path, contentRect)
-      const [minR, maxR] = getValidRatioRange(node, parentExtent)
-      if (maxR <= minR) continue
-
-      let bestRatioForSplit = node.ratio
-      for (let s = 0; s <= steps; s++) {
-        const candidateRatio = minR + (s / steps) * (maxR - minR)
-        const testTree = updateNodeAtPath(currentTree, path, candidateRatio)
-        const score = computeUtilization(testTree, images, contentRect, gutterMm)
-        if (score > bestScore) {
-          bestScore = score
-          bestRatioForSplit = candidateRatio
-          currentTree = testTree
-        }
+    let bestRatioForSplit = node.ratio
+    for (let s = 0; s <= steps; s++) {
+      const candidateRatio = minR + (s / steps) * (maxR - minR)
+      const testTree = updateNodeAtPath(currentTree, path, candidateRatio)
+      const score = computeUtilization(testTree, images, contentRect, gutterMm)
+      if (score > bestScore) {
+        bestScore = score
+        bestRatioForSplit = candidateRatio
+        currentTree = testTree
       }
-
-      currentTree = updateNodeAtPath(currentTree, path, bestRatioForSplit)
     }
+
+    currentTree = updateNodeAtPath(currentTree, path, bestRatioForSplit)
   }
 
   return currentTree
@@ -204,7 +245,7 @@ export function smartPackPage(
   // Candidate templates based on count
   const candidates: string[] = []
   if (count === 1) candidates.push('1')
-  else if (count === 2) candidates.push('2-side', '2-stacked')
+  else if (count === 2) candidates.push('2-stacked', '2-side')
   else if (count === 3) candidates.push('3-featured', '4-grid')
   else if (count === 4) candidates.push('4-grid', '4-featured')
   else candidates.push('6-grid', '4-grid')

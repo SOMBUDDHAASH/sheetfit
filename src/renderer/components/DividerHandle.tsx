@@ -3,23 +3,28 @@ import { ComputedDivider } from '../engine/layoutTree'
 import { snapDividerPosition } from '../engine/snap'
 import { roundPrecision } from '../engine/units'
 
+export interface SplitRatioUpdate {
+  splitId: string
+  ratio: number
+}
+
 interface DividerHandleProps {
   divider: ComputedDivider
   scale: number // screen pixels per mm
-  otherDividerCoords: number[]
+  allDividers: ComputedDivider[]
   onGuideChange: (coord?: number, dir?: 'cols' | 'rows') => void
-  onLiveRatioChange: (splitId: string, ratio: number) => void
-  onCommitRatioChange: (splitId: string, ratio: number) => void
+  onLiveRatiosChange: (updates: SplitRatioUpdate[]) => void
+  onCommitRatiosChange: (updates: SplitRatioUpdate[]) => void
   onResetSplit: (splitId: string) => void
 }
 
 export const DividerHandle: React.FC<DividerHandleProps> = ({
   divider,
   scale,
-  otherDividerCoords,
+  allDividers,
   onGuideChange,
-  onLiveRatioChange,
-  onCommitRatioChange,
+  onLiveRatiosChange,
+  onCommitRatiosChange,
   onResetSplit
 }) => {
   const isDraggingRef = useRef(false)
@@ -36,10 +41,16 @@ export const DividerHandle: React.FC<DividerHandleProps> = ({
 
     const startClient = isCols ? e.clientX : e.clientY
     const startCoord = divider.coord
-    const parentStart = divider.minCoord - divider.minRatio * (divider.maxCoord - divider.minCoord) / (divider.maxRatio - divider.minRatio)
-    const parentExtent = (divider.maxCoord - divider.minCoord) / Math.max(0.001, divider.maxRatio - divider.minRatio)
+    const otherDividerCoords = allDividers
+      .filter((d) => d.id !== divider.id && d.dir === divider.dir)
+      .map((d) => d.coord)
+
+    const parentExtent =
+      (divider.maxCoord - divider.minCoord) / Math.max(0.001, divider.maxRatio - divider.minRatio)
+    const parentStart = divider.coord - divider.ratio * parentExtent
 
     let rAfId: number | null = null
+    let latestUpdates: SplitRatioUpdate[] = []
 
     const handlePointerMove = (moveEvt: PointerEvent) => {
       if (!isDraggingRef.current) return
@@ -61,7 +72,37 @@ export const DividerHandle: React.FC<DividerHandleProps> = ({
         )
 
         setLiveRatio(snapRes.ratio)
-        onLiveRatioChange(divider.splitNodeId, snapRes.ratio)
+
+        // Check collinear dividers if Shift key held
+        const updates: SplitRatioUpdate[] = [{ splitId: divider.splitNodeId, ratio: snapRes.ratio }]
+
+        if (moveEvt.shiftKey) {
+          allDividers.forEach((other) => {
+            if (
+              other.id !== divider.id &&
+              other.dir === divider.dir &&
+              Math.abs(other.coord - divider.coord) <= 0.5
+            ) {
+              const otherParentExtent =
+                (other.maxCoord - other.minCoord) / Math.max(0.001, other.maxRatio - other.minRatio)
+              const otherParentStart = other.coord - other.ratio * otherParentExtent
+              const otherProposed = other.coord + deltaMm
+              const otherSnap = snapDividerPosition(
+                otherProposed,
+                otherParentStart,
+                otherParentExtent,
+                other.minRatio,
+                other.maxRatio,
+                [],
+                true // match directly
+              )
+              updates.push({ splitId: other.splitNodeId, ratio: otherSnap.ratio })
+            }
+          })
+        }
+
+        latestUpdates = updates
+        onLiveRatiosChange(updates)
 
         if (snapRes.isSnapped && snapRes.guideCoord !== undefined) {
           onGuideChange(snapRes.guideCoord, divider.dir)
@@ -71,7 +112,9 @@ export const DividerHandle: React.FC<DividerHandleProps> = ({
 
         const sizeAMm = roundPrecision(snapRes.ratio * parentExtent, 1)
         const sizeBMm = roundPrecision((1 - snapRes.ratio) * parentExtent, 1)
-        setLiveBadge(`${sizeAMm} mm | ${sizeBMm} mm`)
+        setLiveBadge(
+          `${sizeAMm} mm | ${sizeBMm} mm${moveEvt.shiftKey ? ' (Collinear synchronized)' : ''}`
+        )
       })
     }
 
@@ -87,8 +130,8 @@ export const DividerHandle: React.FC<DividerHandleProps> = ({
         e.currentTarget.releasePointerCapture(upEvt.pointerId)
       }
 
-      if (liveRatio !== null) {
-        onCommitRatioChange(divider.splitNodeId, liveRatio)
+      if (latestUpdates.length > 0) {
+        onCommitRatiosChange(latestUpdates)
         setLiveRatio(null)
       }
     }
@@ -116,17 +159,17 @@ export const DividerHandle: React.FC<DividerHandleProps> = ({
 
     if (deltaMm !== 0) {
       e.preventDefault()
-      const parentExtent = (divider.maxCoord - divider.minCoord) / Math.max(0.001, divider.maxRatio - divider.minRatio)
+      const parentExtent =
+        (divider.maxCoord - divider.minCoord) / Math.max(0.001, divider.maxRatio - divider.minRatio)
       const deltaRatio = deltaMm / Math.max(1, parentExtent)
       const newRatio = Math.max(
         divider.minRatio,
         Math.min(divider.maxRatio, divider.ratio + deltaRatio)
       )
-      onCommitRatioChange(divider.splitNodeId, newRatio)
+      onCommitRatiosChange([{ splitId: divider.splitNodeId, ratio: newRatio }])
     }
   }
 
-  // Visual position in mm
   const style: React.CSSProperties = isCols
     ? {
         left: `${divider.coord}mm`,
@@ -160,7 +203,6 @@ export const DividerHandle: React.FC<DividerHandleProps> = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Visual thin line & hover highlight */}
       <div
         className={`transition-colors duration-100 ${
           isCols ? 'w-[2px] h-full' : 'h-[2px] w-full'
@@ -171,11 +213,14 @@ export const DividerHandle: React.FC<DividerHandleProps> = ({
         }`}
       />
 
-      {/* Floating live size badge during drag */}
       {liveBadge && (
         <div
           className="absolute z-40 px-2 py-1 rounded-md bg-neutral-900/90 text-white text-[11px] font-mono shadow-lg border border-neutral-700 pointer-events-none whitespace-nowrap"
-          style={isCols ? { top: '50%', transform: 'translateY(-50%)' } : { left: '50%', transform: 'translateX(-50%)' }}
+          style={
+            isCols
+              ? { top: '50%', transform: 'translateY(-50%)' }
+              : { left: '50%', transform: 'translateX(-50%)' }
+          }
         >
           {liveBadge}
         </div>

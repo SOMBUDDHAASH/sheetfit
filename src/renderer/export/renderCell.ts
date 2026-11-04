@@ -12,6 +12,8 @@ export interface RenderCellResult {
 /**
  * Renders an image within a cell at exact physical size onto an OffscreenCanvas
  * using computeDraw to guarantee preview == print.
+ * Re-reads from original file source via IPC when available to guarantee full 300 DPI resolution,
+ * applying EXIF auto-orientation.
  */
 export async function renderCellToBytes(
   cellRect: Rect,
@@ -39,22 +41,43 @@ export async function renderCellToBytes(
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, canvasW, canvasH)
 
-  // 2. Fetch/decode source image bitmap
+  // 2. Fetch/decode source image bitmap from original file if possible, falling back to proxy
   let bitmap: ImageBitmap
-  try {
-    const response = await fetch(image.proxyUrl || image.source)
-    const blob = await response.blob()
-    bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' })
-  } catch {
-    // If proxy failed, try fallback
-    const imgElement = new Image()
-    imgElement.crossOrigin = 'anonymous'
-    imgElement.src = image.proxyUrl || image.source
-    await new Promise((resolve, reject) => {
-      imgElement.onload = resolve
-      imgElement.onerror = reject
-    })
-    bitmap = await createImageBitmap(imgElement)
+  let blob: Blob
+
+  if (
+    window.api &&
+    image.source &&
+    !image.source.startsWith('blob:') &&
+    !image.source.startsWith('data:')
+  ) {
+    try {
+      const bytes = await window.api.readFile(image.source)
+      const ext = image.source.toLowerCase().split('.').pop() || 'jpeg'
+      const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg'
+      blob = new Blob([bytes as unknown as BlobPart], { type: mime })
+      bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' })
+    } catch {
+      const response = await fetch(image.proxyUrl || image.source)
+      blob = await response.blob()
+      bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' })
+    }
+  } else {
+    try {
+      const response = await fetch(image.proxyUrl || image.source)
+      blob = await response.blob()
+      bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' })
+    } catch {
+      // Fallback for image elements
+      const imgElement = new Image()
+      imgElement.crossOrigin = 'anonymous'
+      imgElement.src = image.proxyUrl || image.source
+      await new Promise((resolve, reject) => {
+        imgElement.onload = resolve
+        imgElement.onerror = reject
+      })
+      bitmap = await createImageBitmap(imgElement)
+    }
   }
 
   // 3. Compute exact placement using pure computeDraw in cell relative space
@@ -81,12 +104,10 @@ export async function renderCellToBytes(
 
   // 6. Draw with rotation & flip
   ctx.save()
-  // Clip to cell area
   ctx.beginPath()
   ctx.rect(0, 0, canvasW, canvasH)
   ctx.clip()
 
-  // Center of destination rect
   const centerX = dxPx + dwPx / 2
   const centerY = dyPx + dhPx / 2
 
@@ -96,7 +117,6 @@ export async function renderCellToBytes(
   if (draw.flipV) ctx.scale(1, -1)
   if (draw.rotation !== 0) ctx.rotate((draw.rotation * Math.PI) / 180)
 
-  // Draw image cropped
   const isRotated90 = draw.rotation === 90 || draw.rotation === 270
   const drawW = isRotated90 ? dhPx : dwPx
   const drawH = isRotated90 ? dwPx : dhPx
@@ -117,12 +137,12 @@ export async function renderCellToBytes(
   bitmap.close()
 
   // Convert to JPEG blob and Uint8Array
-  const blob = await offscreen.convertToBlob({
+  const outBlob = await offscreen.convertToBlob({
     type: 'image/jpeg',
     quality: jpegQuality
   })
 
-  const arrayBuffer = await blob.arrayBuffer()
+  const arrayBuffer = await outBlob.arrayBuffer()
   return {
     bytes: new Uint8Array(arrayBuffer),
     format: 'jpeg',
