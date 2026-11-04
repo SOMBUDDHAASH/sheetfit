@@ -1,0 +1,24 @@
+appId: com.sheetfit.app
+productName: SheetFit
+directories:
+  output: dist
+files:
+  - out/**/*
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: SheetFit
+  uninstallDisplayName: SheetFit
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}
