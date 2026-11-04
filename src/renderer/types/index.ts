@@ -50,6 +50,14 @@ export interface ImageEdit {
   filters: ImageFilters
 }
 
+export interface FreeformPlacement {
+  x: number // mm from page left
+  y: number // mm from page top
+  w: number // mm width
+  h: number // mm height
+  pageIndex: number
+}
+
 export interface ImageItem {
   id: string
   kind: 'image' | 'blank'
@@ -59,6 +67,7 @@ export interface ImageItem {
   naturalH: number // after EXIF correction
   proxyUrl: string // max 1600px long edge
   edit: ImageEdit
+  placement?: FreeformPlacement
 }
 
 export interface Page {
@@ -77,7 +86,7 @@ export interface Settings {
   showScaleBar: boolean
   showCutGuides: boolean
   showSizeBadges: boolean
-  mode: 'flexible' | 'exact'
+  mode: 'flexible' | 'freeform' | 'exact'
   exactPreset?: string
 }
 

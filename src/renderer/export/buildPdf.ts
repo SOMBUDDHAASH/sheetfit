@@ -42,7 +42,14 @@ export async function buildPdf(
 
   // Determine pages to export
   let targetPages: Page[] = []
-  if (doc.settings.mode === 'exact') {
+  if (doc.settings.mode === 'freeform') {
+    const maxP = Math.max(0, ...doc.images.map((i) => i.placement?.pageIndex ?? 0))
+    targetPages = Array.from({ length: maxP + 1 }, (_, idx) => ({
+      id: `freeform-page-${idx}`,
+      tree: { id: `freeform-leaf-${idx}`, type: 'leaf' as const },
+      customized: true
+    }))
+  } else if (doc.settings.mode === 'exact') {
     // In exact mode, pages are generated dynamically based on items and preset
     const preset = EXACT_PRESETS[doc.settings.exactPreset || 'passport'] || EXACT_PRESETS.passport
     const packed = packExactSheet({
@@ -105,7 +112,37 @@ export async function buildPdf(
     const pdfPage = pdfDoc.addPage([A4_WIDTH_PT, A4_HEIGHT_PT])
     pdfPage.setMediaBox(0, 0, A4_WIDTH_PT, A4_HEIGHT_PT)
 
-    if (doc.settings.mode === 'exact') {
+    if (doc.settings.mode === 'freeform') {
+      const pageImages = doc.images.filter((img) => (img.placement?.pageIndex ?? 0) === pIdx)
+      for (const img of pageImages) {
+        if (isCancelled?.()) throw new Error('Export cancelled')
+        if (img.kind === 'blank') continue
+
+        const p = img.placement || { x: 20, y: 20, w: 80, h: 60, pageIndex: 0 }
+        const renderResult = customCellRenderer
+          ? await customCellRenderer(p, img)
+          : await renderCellToBytes(p, img, targetDpi, jpegQuality)
+
+        const embeddedImage =
+          renderResult.format === 'png'
+            ? await pdfDoc.embedPng(renderResult.bytes)
+            : await pdfDoc.embedJpg(renderResult.bytes)
+
+        const xPt = mmToPt(p.x)
+        const yPt = mmToPt(A4_HEIGHT_MM - (p.y + p.h))
+        const wPt = mmToPt(p.w)
+        const hPt = mmToPt(p.h)
+
+        pdfPage.drawImage(embeddedImage, {
+          x: xPt,
+          y: yPt,
+          width: wPt,
+          height: hPt
+        })
+
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+    } else if (doc.settings.mode === 'exact') {
       const preset = EXACT_PRESETS[doc.settings.exactPreset || 'passport'] || EXACT_PRESETS.passport
       const packed = packExactSheet({
         cellW: preset.w,

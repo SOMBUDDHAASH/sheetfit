@@ -19,6 +19,53 @@ export const PrintContainer: React.FC<PrintContainerProps> = ({ doc }) => {
 
   const assignment = assignImagesToLeaves(doc.pages, doc.images)
 
+  if (doc.settings.mode === 'freeform') {
+    const maxP = Math.max(0, ...doc.images.map((i) => i.placement?.pageIndex ?? 0))
+    const pageIndices = Array.from({ length: maxP + 1 }, (_, idx) => idx)
+
+    return (
+      <div id="print-container">
+        {pageIndices.map((pIdx) => {
+          const pageImages = doc.images.filter((img) => (img.placement?.pageIndex ?? 0) === pIdx)
+          return (
+            <div key={pIdx} className="print-page relative bg-white">
+              {pageImages.map((img) => {
+                const p = img.placement || { x: 20, y: 20, w: 80, h: 60, pageIndex: 0 }
+                const crop = img.edit.crop
+                return (
+                  <div
+                    key={img.id}
+                    className="absolute overflow-hidden"
+                    style={{
+                      left: `${p.x}mm`,
+                      top: `${p.y}mm`,
+                      width: `${p.w}mm`,
+                      height: `${p.h}mm`
+                    }}
+                  >
+                    <img
+                      src={img.proxyUrl || img.source}
+                      alt={img.name}
+                      className="absolute block max-w-none"
+                      style={{
+                        width: `${(1 / (crop?.w || 1)) * 100}%`,
+                        height: `${(1 / (crop?.h || 1)) * 100}%`,
+                        left: `${-((crop?.x || 0) / (crop?.w || 1)) * 100}%`,
+                        top: `${-((crop?.y || 0) / (crop?.h || 1)) * 100}%`,
+                        transform: `rotate(${img.edit.rotation}deg) scaleX(${img.edit.flipH ? -1 : 1}) scaleY(${img.edit.flipV ? -1 : 1})`,
+                        filter: `${img.edit.filters.grayscale ? 'grayscale(100%) ' : ''}brightness(${img.edit.filters.brightness}) contrast(${img.edit.filters.contrast})`
+                      }}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   if (doc.settings.mode === 'exact') {
     const preset = EXACT_PRESETS[doc.settings.exactPreset || 'passport'] || EXACT_PRESETS.passport
     const packed = packExactSheet({

@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react'
 import { useProject } from '../store/useProject'
 import { useUi } from '../store/useUi'
 import { PageView } from './PageView'
+import { FreeformCanvas } from './FreeformCanvas'
 import { getLeafAssignments } from '../engine/flow'
 import { A4_WIDTH_MM, MM_PER_INCH } from '../engine/units'
 import { packExactSheet, EXACT_PRESETS } from '../engine/exactSheet'
@@ -130,6 +131,19 @@ export const Canvas: React.FC = () => {
             <span>Exact millimeter accuracy</span>
           </div>
         </label>
+      </div>
+    )
+  }
+
+  // Freeform Canvas View (Photoshop-like free positioning and resizing)
+  if (doc.settings.mode === 'freeform') {
+    return (
+      <div
+        ref={containerRef}
+        onClick={handleCanvasClick}
+        className="flex-1 h-full overflow-auto bg-neutral-200/70 dark:bg-neutral-950 flex flex-col items-center select-none"
+      >
+        <FreeformCanvas scale={scale} />
       </div>
     )
   }

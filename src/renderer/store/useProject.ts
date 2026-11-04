@@ -1,11 +1,12 @@
 import { create } from 'zustand'
 import { temporal } from 'zundo'
 import { immer } from 'zustand/middleware/immer'
-import { Doc, ImageItem, ImageEdit, Settings, LayoutNode } from '../types'
-import { flow } from '../engine/flow'
+import { Doc, ImageItem, ImageEdit, Settings, LayoutNode, FreeformPlacement } from '../types'
+import { flow, getLeafAssignments } from '../engine/flow'
 import { buildTemplate, DEFAULT_TEMPLATE_ID } from '../engine/templates'
 import { updateSplitRatioInTree, splitLeafInTree, mergeLeafInTree } from '../engine/treeOps'
 import { smartPackPage } from '../engine/smartPack'
+import { computeLayout } from '../engine/layoutTree'
 import { A4_WIDTH_MM, A4_HEIGHT_MM } from '../engine/units'
 
 export interface ProjectState {
@@ -25,6 +26,7 @@ export interface ProjectState {
   swapImages: (idA: string, idB: string) => void
   updateImageEdit: (id: string, partialEdit: Partial<ImageEdit>) => void
   batchUpdateImageEdits: (ids: string[], partialEdit: Partial<ImageEdit>) => void
+  updateImagePlacement: (id: string, placement: Partial<FreeformPlacement>) => void
   updateSettings: (partialSettings: Partial<Settings>) => void
   clearAll: () => void
   loadDoc: (newDoc: Doc) => void
@@ -245,9 +247,71 @@ export const useProject = create<ProjectState>()(
         })
       },
 
+      updateImagePlacement: (id, partialPlacement) => {
+        set((state) => {
+          const img = state.doc.images.find((i) => i.id === id)
+          if (img) {
+            img.placement = {
+              x: partialPlacement.x ?? img.placement?.x ?? 20,
+              y: partialPlacement.y ?? img.placement?.y ?? 20,
+              w: partialPlacement.w ?? img.placement?.w ?? 80,
+              h: partialPlacement.h ?? img.placement?.h ?? 60,
+              pageIndex: partialPlacement.pageIndex ?? img.placement?.pageIndex ?? 0
+            }
+          }
+        })
+      },
+
       updateSettings: (partialSettings) => {
         set((state) => {
+          const switchingToFreeform = partialSettings.mode === 'freeform' && state.doc.settings.mode !== 'freeform'
           state.doc.settings = { ...state.doc.settings, ...partialSettings }
+
+          // Initialize freeform placements from current grid if switching to freeform
+          if (switchingToFreeform) {
+            const contentRect = {
+              x: state.doc.settings.marginMm,
+              y: state.doc.settings.marginMm,
+              w: A4_WIDTH_MM - 2 * state.doc.settings.marginMm,
+              h: A4_HEIGHT_MM - 2 * state.doc.settings.marginMm
+            }
+            const assignments = getLeafAssignments(state.doc.pages, state.doc.images)
+            const leafRectMap = new Map<string, { rect: { x: number; y: number; w: number; h: number }; pageIndex: number }>()
+
+            state.doc.pages.forEach((page, pIdx) => {
+              const layout = computeLayout(page.tree, contentRect, state.doc.settings.gutterMm)
+              layout.leafList.forEach((leaf) => {
+                leafRectMap.set(leaf.id, { rect: leaf.rect, pageIndex: pIdx })
+              })
+            })
+
+            assignments.forEach((a) => {
+              if (a.image) {
+                const img = state.doc.images.find((i) => i.id === a.image?.id)
+                if (img) {
+                  const leafInfo = leafRectMap.get(a.leafId)
+                  if (leafInfo) {
+                    img.placement = {
+                      x: leafInfo.rect.x,
+                      y: leafInfo.rect.y,
+                      w: leafInfo.rect.w,
+                      h: leafInfo.rect.h,
+                      pageIndex: leafInfo.pageIndex
+                    }
+                  } else {
+                    img.placement = {
+                      x: 20,
+                      y: 20,
+                      w: 80,
+                      h: 60,
+                      pageIndex: a.pageIndex
+                    }
+                  }
+                }
+              }
+            })
+          }
+
           state.doc = flow(state.doc)
         })
       },

@@ -204,4 +204,46 @@ describe('buildPdf module - print placement & accuracy', () => {
     expect(draw.destRect.h).toBeLessThanOrEqual(cellRect.h)
     expect(draw.destRect.w).toBeLessThanOrEqual(cellRect.w)
   })
+
+  it('exports exact coordinates in Freeform Photoshop mode', async () => {
+    const imgA = makeTestImage('free-1', 'cover', 1200, 800)
+    imgA.placement = { x: 25, y: 30, w: 90, h: 70, pageIndex: 0 }
+
+    const imgB = makeTestImage('free-2', 'contain', 800, 1200)
+    imgB.placement = { x: 120, y: 50, w: 75, h: 110, pageIndex: 0 }
+
+    const doc: Doc = {
+      images: [imgA, imgB],
+      pages: [],
+      settings: { ...defaultSettings, mode: 'freeform' }
+    }
+
+    let renderedCells: any[] = []
+    const pdfBytes = await buildPdf(doc, {
+      customCellRenderer: async (cell) => {
+        renderedCells.push(cell)
+        return {
+          bytes: MINIMAL_JPEG,
+          format: 'jpeg',
+          widthPx: 100,
+          heightPx: 100
+        }
+      }
+    })
+
+    expect(pdfBytes.length).toBeGreaterThan(0)
+    expect(renderedCells).toHaveLength(2)
+
+    // Image A placement exact mm
+    expect(renderedCells[0].x).toBe(25)
+    expect(renderedCells[0].y).toBe(30)
+    expect(renderedCells[0].w).toBe(90)
+    expect(renderedCells[0].h).toBe(70)
+
+    // Image B placement exact mm
+    expect(renderedCells[1].x).toBe(120)
+    expect(renderedCells[1].y).toBe(50)
+    expect(renderedCells[1].w).toBe(75)
+    expect(renderedCells[1].h).toBe(110)
+  })
 })

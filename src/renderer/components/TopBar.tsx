@@ -190,7 +190,7 @@ export const TopBar: React.FC = () => {
 
       {/* Middle: Mode & Templates & Margin/Gutter */}
       <div className="flex items-center gap-4">
-        {/* Mode Toggle: Flexible vs Exact */}
+        {/* Mode Toggle: Flexible vs Freeform vs Exact */}
         <div className="flex items-center p-0.5 bg-neutral-100 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
           <button
             onClick={() => updateSettings({ mode: 'flexible' })}
@@ -201,6 +201,16 @@ export const TopBar: React.FC = () => {
             }`}
           >
             Flexible Grid
+          </button>
+          <button
+            onClick={() => updateSettings({ mode: 'freeform' })}
+            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+              doc.settings.mode === 'freeform'
+                ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100 shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200'
+            }`}
+          >
+            Freeform (Photoshop)
           </button>
           <button
             onClick={() => updateSettings({ mode: 'exact' })}
