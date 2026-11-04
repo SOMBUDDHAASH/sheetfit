@@ -19,7 +19,8 @@ export async function renderCellToBytes(
   cellRect: Rect,
   image: ImageItem,
   targetDpi: number = 300,
-  jpegQuality: number = 0.92
+  jpegQuality: number = 0.92,
+  forceGrayscale: boolean = false
 ): Promise<RenderCellResult> {
   // 1. Calculate physical size at target DPI without upscaling beyond source resolution
   const targetPxW = Math.round((cellRect.w / MM_PER_INCH) * targetDpi)
@@ -86,7 +87,7 @@ export async function renderCellToBytes(
 
   // 4. Apply Filters
   const filters: string[] = []
-  if (draw.filters.grayscale) filters.push('grayscale(100%)')
+  if (forceGrayscale || draw.filters.grayscale) filters.push('grayscale(100%)')
   if (draw.filters.brightness !== 1) filters.push(`brightness(${draw.filters.brightness})`)
   if (draw.filters.contrast !== 1) filters.push(`contrast(${draw.filters.contrast})`)
   if (filters.length > 0) {

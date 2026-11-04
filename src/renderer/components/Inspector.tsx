@@ -12,7 +12,10 @@ import {
   Sliders,
   Maximize2,
   Minimize2,
-  StretchHorizontal
+  StretchHorizontal,
+  ChevronLeft,
+  ChevronRight,
+  Palette
 } from 'lucide-react'
 
 export const Inspector: React.FC = () => {
@@ -23,13 +26,38 @@ export const Inspector: React.FC = () => {
   const selectedImageId = useUi((state) => state.selectedImageId)
   const selectedImageIds = useUi((state) => state.selectedImageIds)
   const openCropModal = useUi((state) => state.openCropModal)
+  const isInspectorCollapsed = useUi((state) => state.isInspectorCollapsed)
+  const toggleInspector = useUi((state) => state.toggleInspector)
 
   const selectedImage = images.find((img) => img.id === selectedImageId)
   const isMulti = selectedImageIds.length > 1
 
+  // Collapsed Rail View
+  if (isInspectorCollapsed) {
+    return (
+      <aside className="w-12 shrink-0 border-l border-neutral-200 dark:border-neutral-800 bg-neutral-50/90 dark:bg-neutral-900/80 flex flex-col items-center py-3 select-none transition-all duration-200">
+        <button
+          onClick={toggleInspector}
+          title="Expand Inspector (Ctrl+])"
+          className="p-2 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-300 transition-colors mb-3"
+        >
+          <ChevronLeft className="w-4 h-4 text-blue-500" />
+        </button>
+        <Sliders className="w-4 h-4 text-neutral-400 mt-2" />
+      </aside>
+    )
+  }
+
   if (!selectedImage) {
     return (
-      <aside className="w-72 shrink-0 border-l border-neutral-200 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-900/60 p-4 flex flex-col items-center justify-center text-center text-xs text-neutral-400 select-none">
+      <aside className="w-72 shrink-0 border-l border-neutral-200 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-900/60 p-4 flex flex-col items-center justify-center text-center text-xs text-neutral-400 select-none relative transition-all duration-200">
+        <button
+          onClick={toggleInspector}
+          title="Collapse Inspector (Ctrl+])"
+          className="absolute top-3 left-3 p-1 rounded text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
         <Sliders className="w-8 h-8 opacity-30 mb-2" />
         <span className="font-medium">No selection</span>
         <span className="text-[11px] mt-1 text-neutral-400/80">
@@ -89,9 +117,18 @@ export const Inspector: React.FC = () => {
     <aside className="w-72 shrink-0 border-l border-neutral-200 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-900/60 flex flex-col h-full overflow-y-auto select-none text-xs">
       {/* Header */}
       <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
-        <span className="font-semibold text-neutral-800 dark:text-neutral-200 truncate pr-2">
-          {isMulti ? `${selectedImageIds.length} Images Selected` : selectedImage.name}
-        </span>
+        <div className="flex items-center gap-1.5 min-w-0 pr-2">
+          <button
+            onClick={toggleInspector}
+            title="Collapse Inspector (Ctrl+])"
+            className="p-1 rounded text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors shrink-0"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          <span className="font-semibold text-neutral-800 dark:text-neutral-200 truncate">
+            {isMulti ? `${selectedImageIds.length} Images Selected` : selectedImage.name}
+          </span>
+        </div>
         <span
           className={`shrink-0 font-mono font-medium ${
             dpi.level === 'low'
@@ -241,24 +278,44 @@ export const Inspector: React.FC = () => {
         {/* Filters */}
         <div className="space-y-3 pt-2 border-t border-neutral-200 dark:border-neutral-800">
           <label className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 block">
-            Image Filters
+            Color & Filters
           </label>
 
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={edit.filters.grayscale}
-              onChange={(e) =>
+          {/* Color vs B&W Mode Switch */}
+          <div className="grid grid-cols-2 gap-1 p-0.5 bg-neutral-200/80 dark:bg-neutral-800 rounded-lg text-xs">
+            <button
+              type="button"
+              onClick={() =>
                 updateImageEdit(selectedImage.id, {
-                  filters: { ...edit.filters, grayscale: e.target.checked }
+                  filters: { ...edit.filters, grayscale: false }
                 })
               }
-              className="rounded accent-blue-600"
-            />
-            <span className="text-neutral-700 dark:text-neutral-300 text-xs">
-              Black & White (Grayscale)
-            </span>
-          </label>
+              className={`py-1.5 px-2 rounded-md font-medium flex items-center justify-center gap-1.5 transition-colors ${
+                !edit.filters.grayscale
+                  ? 'bg-white dark:bg-neutral-700 text-purple-700 dark:text-purple-300 shadow-xs'
+                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
+              }`}
+            >
+              <Palette className="w-3.5 h-3.5 text-purple-500" />
+              <span>Full Color</span>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                updateImageEdit(selectedImage.id, {
+                  filters: { ...edit.filters, grayscale: true }
+                })
+              }
+              className={`py-1.5 px-2 rounded-md font-medium flex items-center justify-center gap-1.5 transition-colors ${
+                edit.filters.grayscale
+                  ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100 shadow-xs'
+                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
+              }`}
+            >
+              <span className="w-2.5 h-2.5 rounded-full bg-neutral-500" />
+              <span>B&W (Grayscale)</span>
+            </button>
+          </div>
 
           <div>
             <div className="flex items-center justify-between mb-1">

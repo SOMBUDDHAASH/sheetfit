@@ -32,6 +32,9 @@ export interface ProjectState {
   loadDoc: (newDoc: Doc) => void
   smartPackCurrentPage: (pageId: string) => void
   smartPackAllPages: () => void
+  toggleImageGrayscale: (id: string) => void
+  setPageGrayscale: (pageIndex: number, grayscale: boolean) => void
+  groupByColor: () => void
 }
 
 const initialSettings: Settings = {
@@ -378,6 +381,65 @@ export const useProject = create<ProjectState>()(
             page.customized = true
             imgOffset += 4
           })
+          state.doc = flow(state.doc)
+        })
+      },
+
+      toggleImageGrayscale: (id) => {
+        set((state) => {
+          const img = state.doc.images.find((i) => i.id === id)
+          if (img) {
+            img.edit.filters.grayscale = !img.edit.filters.grayscale
+          }
+        })
+      },
+
+      setPageGrayscale: (pageIndex, grayscale) => {
+        set((state) => {
+          if (state.doc.settings.mode === 'freeform') {
+            state.doc.images.forEach((img) => {
+              if ((img.placement?.pageIndex ?? 0) === pageIndex) {
+                img.edit.filters.grayscale = grayscale
+              }
+            })
+          } else {
+            const assignments = getLeafAssignments(state.doc.pages, state.doc.images)
+            assignments.forEach((a) => {
+              if (a.pageIndex === pageIndex && a.image) {
+                const img = state.doc.images.find((i) => i.id === a.image?.id)
+                if (img) {
+                  img.edit.filters.grayscale = grayscale
+                }
+              }
+            })
+          }
+        })
+      },
+
+      groupByColor: () => {
+        set((state) => {
+          const colorImages = state.doc.images.filter((img) => !img.edit.filters.grayscale)
+          const bwImages = state.doc.images.filter((img) => img.edit.filters.grayscale)
+
+          if (state.doc.settings.mode === 'freeform') {
+            // In freeform mode, re-index pages so color comes first, then bw
+            const colorPagesCount = Math.max(
+              1,
+              Math.max(0, ...colorImages.map((i) => i.placement?.pageIndex ?? 0)) + 1
+            )
+            colorImages.forEach((img, i) => {
+              if (img.placement) {
+                img.placement.pageIndex = Math.floor(i / 4)
+              }
+            })
+            bwImages.forEach((img, i) => {
+              if (img.placement) {
+                img.placement.pageIndex = colorPagesCount + Math.floor(i / 4)
+              }
+            })
+          }
+
+          state.doc.images = [...colorImages, ...bwImages]
           state.doc = flow(state.doc)
         })
       }

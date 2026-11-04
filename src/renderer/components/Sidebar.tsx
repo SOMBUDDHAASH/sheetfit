@@ -17,7 +17,7 @@ import { useProject } from '../store/useProject'
 import { useUi } from '../store/useUi'
 import { QueueItem } from './QueueItem'
 import { getLeafAssignments } from '../engine/flow'
-import { Trash, Plus, Images } from 'lucide-react'
+import { Trash, Plus, Images, ChevronLeft, ChevronRight, Palette } from 'lucide-react'
 
 export const Sidebar: React.FC = () => {
   const images = useProject((state) => state.doc.images)
@@ -25,8 +25,12 @@ export const Sidebar: React.FC = () => {
   const reorderImages = useProject((state) => state.reorderImages)
   const clearAll = useProject((state) => state.clearAll)
   const insertBlankCell = useProject((state) => state.insertBlankCell)
+  const groupByColor = useProject((state) => state.groupByColor)
 
   const selectedImageIds = useUi((state) => state.selectedImageIds)
+  const isSidebarCollapsed = useUi((state) => state.isSidebarCollapsed)
+  const toggleSidebar = useUi((state) => state.toggleSidebar)
+  const addToast = useUi((state) => state.addToast)
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -57,8 +61,38 @@ export const Sidebar: React.FC = () => {
 
   const allIds = images.map((img) => img.id)
 
+  // Collapsed Sidebar Rail
+  if (isSidebarCollapsed) {
+    return (
+      <aside className="w-12 shrink-0 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/90 dark:bg-neutral-900/80 flex flex-col items-center py-3 select-none transition-all duration-200">
+        <button
+          onClick={toggleSidebar}
+          title="Expand Queue (Ctrl+[)"
+          className="p-2 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-300 transition-colors mb-3"
+        >
+          <ChevronRight className="w-4 h-4 text-blue-500" />
+        </button>
+
+        <div className="flex flex-col items-center gap-1 my-2">
+          <Images className="w-4 h-4 text-neutral-400" />
+          <span className="text-[11px] font-bold font-mono text-neutral-600 dark:text-neutral-400">
+            {images.length}
+          </span>
+        </div>
+
+        <button
+          onClick={() => insertBlankCell()}
+          title="Insert Blank Cell"
+          className="p-2 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors mt-auto"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      </aside>
+    )
+  }
+
   return (
-    <aside className="w-72 shrink-0 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-900/60 flex flex-col h-full select-none">
+    <aside className="w-72 shrink-0 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-900/60 flex flex-col h-full select-none transition-all duration-200">
       {/* Sidebar Header */}
       <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -73,6 +107,23 @@ export const Sidebar: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-1">
+          {images.length > 1 && (
+            <button
+              onClick={() => {
+                groupByColor()
+                addToast({
+                  title: 'Grouped by Color',
+                  description: 'Color pages placed first, B&W pages placed second.',
+                  type: 'info'
+                })
+              }}
+              title="Group by Color (Xerox shop optimization)"
+              className="p-1 rounded text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-950/40 transition-colors"
+            >
+              <Palette className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           <button
             onClick={() => insertBlankCell()}
             title="Insert Blank Cell"
@@ -89,6 +140,15 @@ export const Sidebar: React.FC = () => {
               <Trash className="w-3.5 h-3.5" />
             </button>
           )}
+
+          {/* Shrink / Collapse Chevron */}
+          <button
+            onClick={toggleSidebar}
+            title="Collapse Queue Sidebar (Ctrl+[)"
+            className="p-1 rounded text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors ml-1"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
         </div>
       </div>
 

@@ -12,6 +12,7 @@ export interface PdfExportOptions {
   showCutGuides?: boolean
   pageRange?: 'all' | 'current' | number[]
   currentPageIndex?: number
+  forceGrayscale?: boolean
   onProgress?: (progress: number, statusText: string) => void
   isCancelled?: () => boolean
   // Optional pre-rendered image renderer for Node/Vitest testing
@@ -33,6 +34,7 @@ export async function buildPdf(
     showCutGuides = doc.settings.showCutGuides,
     pageRange = 'all',
     currentPageIndex = 0,
+    forceGrayscale = false,
     onProgress,
     isCancelled,
     customCellRenderer
@@ -121,7 +123,7 @@ export async function buildPdf(
         const p = img.placement || { x: 20, y: 20, w: 80, h: 60, pageIndex: 0 }
         const renderResult = customCellRenderer
           ? await customCellRenderer(p, img)
-          : await renderCellToBytes(p, img, targetDpi, jpegQuality)
+          : await renderCellToBytes(p, img, targetDpi, jpegQuality, forceGrayscale)
 
         const embeddedImage =
           renderResult.format === 'png'
@@ -166,7 +168,7 @@ export async function buildPdf(
         const cell = pageCells[cIdx]
         const renderResult = customCellRenderer
           ? await customCellRenderer(cell, img)
-          : await renderCellToBytes(cell, img, targetDpi, jpegQuality)
+          : await renderCellToBytes(cell, img, targetDpi, jpegQuality, forceGrayscale)
 
         const embeddedImage =
           renderResult.format === 'png'
@@ -245,7 +247,7 @@ export async function buildPdf(
 
         const renderResult = customCellRenderer
           ? await customCellRenderer(leaf.rect, img)
-          : await renderCellToBytes(leaf.rect, img, targetDpi, jpegQuality)
+          : await renderCellToBytes(leaf.rect, img, targetDpi, jpegQuality, forceGrayscale)
 
         const embeddedImage =
           renderResult.format === 'png'

@@ -31,6 +31,7 @@ export const QueueItem: React.FC<QueueItemProps> = ({
 
   const removeImage = useProject((state) => state.removeImage)
   const updateImageEdit = useProject((state) => state.updateImageEdit)
+  const toggleImageGrayscale = useProject((state) => state.toggleImageGrayscale)
   const selectImage = useUi((state) => state.selectImage)
   const openCropModal = useUi((state) => state.openCropModal)
 
@@ -129,6 +130,22 @@ export const QueueItem: React.FC<QueueItemProps> = ({
           >
             {dpi.dpi} DPI
           </span>
+          {image.kind !== 'blank' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleImageGrayscale(image.id)
+              }}
+              title={image.edit.filters.grayscale ? 'B&W Image (Click to make Color)' : 'Color Image (Click to make B&W)'}
+              className={`px-1 rounded text-[9px] font-bold uppercase transition-colors ${
+                image.edit.filters.grayscale
+                  ? 'bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-300'
+                  : 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 hover:bg-purple-200'
+              }`}
+            >
+              {image.edit.filters.grayscale ? 'B&W' : 'Color'}
+            </button>
+          )}
         </div>
       </div>
 

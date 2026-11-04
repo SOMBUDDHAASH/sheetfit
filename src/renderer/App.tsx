@@ -32,6 +32,8 @@ export const App: React.FC = () => {
   const setPrintTipDialogOpen = useUi((state) => state.setPrintTipDialogOpen)
   const setShortcutsOpen = useUi((state) => state.setShortcutsOpen)
   const isShortcutsOpen = useUi((state) => state.isShortcutsOpen)
+  const toggleSidebar = useUi((state) => state.toggleSidebar)
+  const toggleInspector = useUi((state) => state.toggleInspector)
   const addToast = useUi((state) => state.addToast)
 
   // 1. Initialize Autosave & Recovery
@@ -154,6 +156,12 @@ export const App: React.FC = () => {
       } else if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
         e.preventDefault()
         setShortcutsOpen(!isShortcutsOpen)
+      } else if (e.key === '[' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault()
+        toggleSidebar()
+      } else if (e.key === ']' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault()
+        toggleInspector()
       }
     }
 

@@ -22,6 +22,9 @@ export interface UiState {
   isExportDialogOpen: boolean
   isPrintTipDialogOpen: boolean
   isShortcutsOpen: boolean
+  isSidebarCollapsed: boolean
+  isInspectorCollapsed: boolean
+  zoomFitRequest: 'page' | 'width' | null
   isExporting: boolean
   exportProgress: number // 0..100
   exportStatusText: string
@@ -30,6 +33,12 @@ export interface UiState {
   // Actions
   setTheme: (theme: 'light' | 'dark' | 'system') => void
   setZoomPercent: (zoom: number) => void
+  triggerZoomFit: (mode: 'page' | 'width') => void
+  clearZoomFitRequest: () => void
+  toggleSidebar: () => void
+  toggleInspector: () => void
+  setSidebarCollapsed: (collapsed: boolean) => void
+  setInspectorCollapsed: (collapsed: boolean) => void
   selectImage: (id: string | null, multi?: boolean, range?: boolean, allIds?: string[]) => void
   selectCell: (id: string | null) => void
   setIsDraggingFiles: (dragging: boolean) => void
@@ -55,10 +64,21 @@ export const useUi = create<UiState>((set, get) => ({
   isExportDialogOpen: false,
   isPrintTipDialogOpen: false,
   isShortcutsOpen: false,
+  isSidebarCollapsed: false,
+  isInspectorCollapsed: false,
+  zoomFitRequest: null,
   isExporting: false,
   exportProgress: 0,
   exportStatusText: '',
   toasts: [],
+
+  triggerZoomFit: (mode) => set({ zoomFitRequest: mode }),
+  clearZoomFitRequest: () => set({ zoomFitRequest: null }),
+
+  setSidebarCollapsed: (isSidebarCollapsed) => set({ isSidebarCollapsed }),
+  setInspectorCollapsed: (isInspectorCollapsed) => set({ isInspectorCollapsed }),
+  toggleSidebar: () => set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
+  toggleInspector: () => set((state) => ({ isInspectorCollapsed: !state.isInspectorCollapsed })),
 
   setTheme: (theme) => {
     set({ theme })

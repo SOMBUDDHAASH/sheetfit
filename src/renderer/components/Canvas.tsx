@@ -16,6 +16,8 @@ export const Canvas: React.FC = () => {
 
   const zoomPercent = useUi((state) => state.zoomPercent)
   const setZoomPercent = useUi((state) => state.setZoomPercent)
+  const zoomFitRequest = useUi((state) => state.zoomFitRequest)
+  const clearZoomFitRequest = useUi((state) => state.clearZoomFitRequest)
   const selectCell = useUi((state) => state.selectCell)
   const selectImage = useUi((state) => state.selectImage)
   const addToast = useUi((state) => state.addToast)
@@ -23,6 +25,27 @@ export const Canvas: React.FC = () => {
   // Standard 96 DPI screen scale: 96 / 25.4 = 3.7795 px/mm at 100%
   const basePxPerMm = 96 / MM_PER_INCH
   const scale = basePxPerMm * (zoomPercent / 100)
+
+  // Handle Fit Page / Fit Width requests
+  useEffect(() => {
+    if (!zoomFitRequest || !containerRef.current) return
+    const container = containerRef.current
+    const availW = Math.max(300, container.clientWidth - 64)
+    const availH = Math.max(300, container.clientHeight - 80)
+    const baseWidthPx = A4_WIDTH_MM * basePxPerMm
+    const baseHeightPx = 297 * basePxPerMm
+
+    if (zoomFitRequest === 'width') {
+      const targetZoom = Math.round((availW / baseWidthPx) * 100)
+      setZoomPercent(targetZoom)
+    } else if (zoomFitRequest === 'page') {
+      const zoomX = availW / baseWidthPx
+      const zoomY = availH / baseHeightPx
+      const targetZoom = Math.round(Math.min(zoomX, zoomY) * 100)
+      setZoomPercent(targetZoom)
+    }
+    clearZoomFitRequest()
+  }, [zoomFitRequest, setZoomPercent, clearZoomFitRequest, basePxPerMm])
 
   // Zoom with Ctrl + Wheel
   useEffect(() => {
@@ -141,7 +164,7 @@ export const Canvas: React.FC = () => {
       <div
         ref={containerRef}
         onClick={handleCanvasClick}
-        className="flex-1 h-full overflow-auto bg-neutral-200/70 dark:bg-neutral-950 flex flex-col items-center select-none"
+        className="flex-1 h-full overflow-auto bg-neutral-200/70 dark:bg-neutral-950 flex flex-col items-center p-8 select-none"
       >
         <FreeformCanvas scale={scale} />
       </div>
@@ -162,6 +185,10 @@ export const Canvas: React.FC = () => {
       isCardFrontBack: preset.isSpecialStack
     })
 
+    const zoomFactor = zoomPercent / 100
+    const containerW = A4_WIDTH_MM * basePxPerMm * zoomFactor
+    const containerH = 297 * basePxPerMm * zoomFactor
+
     return (
       <div
         ref={containerRef}
@@ -169,52 +196,62 @@ export const Canvas: React.FC = () => {
         className="flex-1 h-full overflow-auto bg-neutral-200/70 dark:bg-neutral-950 flex flex-col items-center p-8 select-none"
       >
         {packedPages.map((page, pIdx) => (
-          <div key={pIdx} className="flex flex-col items-center mb-8">
-            <div
-              className="flex items-center justify-between pb-2 text-xs text-neutral-500 select-none"
-              style={{ width: `${A4_WIDTH_MM * scale}px` }}
-            >
+          <div
+            key={pIdx}
+            className="flex flex-col items-center mb-8 shrink-0"
+            style={{ width: `${containerW}px` }}
+          >
+            <div className="flex items-center justify-between pb-2 text-xs text-neutral-500 select-none w-full">
               <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
                 Page {pIdx + 1} of {packedPages.length} ({preset.name})
               </span>
             </div>
 
             <div
-              className="relative bg-white shadow-xl dark:shadow-2xl dark:shadow-black/60 select-none"
+              className="relative overflow-hidden shadow-2xl dark:shadow-black/80 rounded-xs border border-neutral-300/70 dark:border-neutral-800"
               style={{
-                width: `${A4_WIDTH_MM * scale}px`,
-                height: `${297 * scale}px`,
-                fontSize: `${scale}px`
+                width: `${containerW}px`,
+                height: `${containerH}px`
               }}
             >
-              {page.cells.map((cell, cIdx) => {
-                const imgIdx = pIdx * page.cells.length + cIdx
-                const img = doc.images[imgIdx]
-                return (
-                  <div
-                    key={cIdx}
-                    className="absolute overflow-hidden bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700"
-                    style={{
-                      left: `${cell.x}mm`,
-                      top: `${cell.y}mm`,
-                      width: `${cell.w}mm`,
-                      height: `${cell.h}mm`
-                    }}
-                  >
-                    {img && (
-                      <img
-                        src={img.proxyUrl || img.source}
-                        alt={img.name}
-                        className="w-full h-full object-cover"
-                        style={{
-                          transform: `rotate(${img.edit.rotation}deg) scaleX(${img.edit.flipH ? -1 : 1}) scaleY(${img.edit.flipV ? -1 : 1})`,
-                          filter: `${img.edit.filters.grayscale ? 'grayscale(100%) ' : ''}brightness(${img.edit.filters.brightness}) contrast(${img.edit.filters.contrast})`
-                        }}
-                      />
-                    )}
-                  </div>
-                )
-              })}
+              <div
+                className="absolute top-0 left-0 bg-white select-none origin-top-left"
+                style={{
+                  width: `${A4_WIDTH_MM}mm`,
+                  height: '297mm',
+                  transform: `scale(${zoomFactor})`,
+                  transformOrigin: 'top left'
+                }}
+              >
+                {page.cells.map((cell, cIdx) => {
+                  const imgIdx = pIdx * page.cells.length + cIdx
+                  const img = doc.images[imgIdx]
+                  return (
+                    <div
+                      key={cIdx}
+                      className="absolute overflow-hidden bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700"
+                      style={{
+                        left: `${cell.x}mm`,
+                        top: `${cell.y}mm`,
+                        width: `${cell.w}mm`,
+                        height: `${cell.h}mm`
+                      }}
+                    >
+                      {img && (
+                        <img
+                          src={img.proxyUrl || img.source}
+                          alt={img.name}
+                          className="w-full h-full object-cover"
+                          style={{
+                            transform: `rotate(${img.edit.rotation}deg) scaleX(${img.edit.flipH ? -1 : 1}) scaleY(${img.edit.flipV ? -1 : 1})`,
+                            filter: `${img.edit.filters.grayscale ? 'grayscale(100%) ' : ''}brightness(${img.edit.filters.brightness}) contrast(${img.edit.filters.contrast})`
+                          }}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </div>
         ))}
