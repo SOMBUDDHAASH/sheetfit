@@ -1,0 +1,48 @@
+@media print {
+  @page {
+    size: 210mm 297mm;
+    margin: 0;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background: transparent !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide all app UI chrome under print */
+  #root > div > *:not(#print-container) {
+    display: none !important;
+  }
+
+  #print-container {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 210mm;
+  }
+
+  .print-page {
+    width: 210mm;
+    height: 297mm;
+    box-sizing: border-box;
+    overflow: hidden;
+    position: relative;
+    background: white;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  /* Avoid trailing blank page on last page */
+  .print-page:last-child {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+}
+
+#print-container {
+  display: none;
+}
